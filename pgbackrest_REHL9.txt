@@ -1,0 +1,124 @@
+PostgreSQL Backup & Restore with pgBackRest
+===========================================
+
+This guide details the steps to install, configure, and manage PostgreSQL backups using pgBackRest on RHEL/CentOS 9 systems.
+
+PREREQUISITES
+-------------
+* OS: RHEL 9 / CentOS 9 / AlmaLinux 9
+* Database: PostgreSQL
+* Permissions: Root/Sudo for installation; 'postgres' user for specific commands.
+
+
+1. INSTALLATION
+---------------
+Install the EPEL repository and the pgBackRest package.
+
+# Install EPEL Release for RHEL 9
+sudo dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm -y
+
+# Install pgBackRest
+sudo dnf install pgbackrest -y
+
+
+2. BACKREST CONFIGURATION
+-------------------------
+
+### Create Backup Directory
+mkdir -p /data/pgbackup/pitr_backup
+# Ensure postgres user owns this directory (optional but recommended)
+chown postgres:postgres /data/pgbackup/pitr_backup
+
+### Configure pgbackrest.conf
+Edit the configuration file:
+vi /etc/pgbackrest/pgbackrest.conf
+
+Paste the following configuration:
+----------------------------------
+[global]
+repo1-path=/data/pgbackup/pitr_backup
+repo1-retention-full=2   
+repo1-host-user=postgres
+start-fast=y
+log-path=/data/pgbackup/pitr_backup
+process-max=5
+log-level-console=info
+log-level-file=debug
+log-level-stderr=warn
+log-subprocess=y
+log-timestamp=y
+
+[testdb]
+pg1-path=/data/pgdata/
+pg1-port=5432
+pg1-socket-path=/tmp
+----------------------------------
+
+
+3. POSTGRESQL CONFIGURATION
+---------------------------
+You need to enable archiving in your PostgreSQL cluster.
+
+1. Edit your postgresql.conf (usually located in $PGDATA).
+2. Add or modify the following parameters.
+   NOTE: Changing archive_mode requires a PostgreSQL service restart.
+
+----------------------------------
+archive_mode = on
+archive_command = '/usr/bin/pgbackrest --stanza=testdb archive-push %p'
+wal_level = replica
+max_wal_senders = 10
+----------------------------------
+
+3. Restart the PostgreSQL service:
+sudo systemctl restart postgresql
+
+
+4. STANZA CREATION & CHECK
+--------------------------
+# Create the stanza
+pgbackrest --stanza=testdb stanza-create
+
+# Check configuration and archiving status
+pgbackrest --stanza=testdb check
+
+
+5. BACKUP OPERATIONS
+--------------------
+# Perform a Full Backup
+pgbackrest --stanza=testdb --type=full backup
+
+# Perform an Incremental Backup
+pgbackrest --stanza=testdb --type=incr backup
+
+
+6. RESTORE OPERATIONS
+---------------------
+(Ensure you run these as the postgres user. Stop the service before restoring if necessary.)
+
+# Standard Restore
+sudo -u postgres pgbackrest --stanza=testdb restore
+
+# Delta Restore (Syncs existing directory to backup state)
+sudo -u postgres pgbackrest --stanza=testdb --delta restore
+
+
+7. TESTING DATA GENERATION (SQL)
+--------------------------------
+Use the following SQL commands to generate a sample table with 1 million records.
+
+-- 1. Create the table
+CREATE TABLE data (
+    id SERIAL PRIMARY KEY,
+    username TEXT,
+    status_code INT,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 2. Insert 1 million records efficiently
+INSERT INTO data (username, status_code, created_at)
+SELECT
+    'user_' || i,
+    floor(random() * 100 + 1)::int,
+    NOW() - (random() * (INTERVAL '90 days'))
+FROM generate_series(1, 1000000) AS i;
