@@ -91,16 +91,19 @@ pgbackrest --stanza=testdb --type=full backup
 # Perform an Incremental Backup
 pgbackrest --stanza=testdb --type=incr backup
 
+# Perform an diffrential Backup
+pgbackrest --stanza=testdb --type=diff backup
+
 
 6. RESTORE OPERATIONS
 ---------------------
 (Ensure you run these as the postgres user. Stop the service before restoring if necessary.)
 
 # Standard Restore
-sudo -u postgres pgbackrest --stanza=testdb restore
+pgbackrest --stanza=testdb restore
 
 # Delta Restore (Syncs existing directory to backup state)
-sudo -u postgres pgbackrest --stanza=testdb --delta restore
+pgbackrest --stanza=testdb --delta restore
 
 
 7. TESTING DATA GENERATION (SQL)
@@ -121,4 +124,9 @@ SELECT
     'user_' || i,
     floor(random() * 100 + 1)::int,
     NOW() - (random() * (INTERVAL '90 days'))
+
 FROM generate_series(1, 1000000) AS i;
+
+****** After every restore check the counts
+
+************************************ THANK YOU ********************************************
